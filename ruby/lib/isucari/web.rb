@@ -184,6 +184,8 @@ module Isucari
         db.xquery('INSERT INTO `configs` (name, val) VALUES (?, ?) ON DUPLICATE KEY UPDATE `val` = VALUES(`val`)', name, value)
       end
 
+      init_categories
+
       content_type :json
 
       response = {
