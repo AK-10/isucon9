@@ -6,6 +6,8 @@ require 'mysql2-cs-bind'
 require 'bcrypt'
 require 'isucari/api'
 
+require 'redis'
+
 module Isucari
   class Web < Sinatra::Base
     DEFAULT_PAYMENT_SERVICE_URL = 'http://localhost:5555'
@@ -66,6 +68,29 @@ module Isucari
         )
       end
 
+      def redis_client
+        Thread.current[:redis] ||= Redis.new(path: ENV["REDIS_PID"])
+      end
+
+      def init_categories
+        # CREATE TABLE `categories` (
+        #   `id` int unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        #   `parent_id` int unsigned NOT NULL,
+        #   `category_name` varchar(191) NOT NULL
+        # ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4;
+        db.xquery('SELECT * FROM `categories`').each do |category|
+          # to_jsonでマーシャル(実体は文字列)
+          redis_client.rpush("categories", category.to_json)
+        end
+      end
+
+      def get_categories
+        redis_client.lrange("categories", 0, 43).map do |category_str|
+          # json文字列からhashへ変換
+          JSON.parse(category_str)
+        end
+      end
+
       def api_client
         Thread.current[:api_client] ||= ::Isucari::API.new
       end
@@ -91,7 +116,7 @@ module Isucari
       end
 
       def get_category_by_id(category_id)
-        category = db.xquery('SELECT * FROM `categories` WHERE `id` = ?', category_id).first
+        category = get_categories.find { |cate| cate["id"] == category_id }
 
         return if category.nil?
 
@@ -222,7 +247,7 @@ module Isucari
       root_category = get_category_by_id(root_category_id)
       halt_with_error 404, 'category not found' if root_category.nil?
 
-      category_ids = db.xquery('SELECT id FROM `categories` WHERE parent_id = ?', root_category['id']).map { |row| row['id'] }
+      category_ids = get_categories.select { |cate| cate["parent_id"] == root_category["id"] }.map { |row| row["id"] }
 
       item_id = params['item_id'].to_i
       created_at = params['created_at'].to_i
