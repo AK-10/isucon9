@@ -69,7 +69,7 @@ module Isucari
       end
 
       def redis_client
-        Thread.current[:redis] ||= Redis.new(path: ENV["REDIS_PID"])
+        Thread.current[:redis] ||= Redis.new(path: ENV["REDIS_PID"] || '/var/run/redis.pid')
       end
 
       def init_categories
