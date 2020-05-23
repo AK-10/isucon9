@@ -327,7 +327,8 @@ module Isucari
         # paging
         begin
           db.xquery("#{common_query} WHERE (i.seller_id = ? OR i.buyer_id = ?) AND i.status IN (?, ?, ?, ?, ?) AND (i.created_at < ?  OR (i.created_at <= ? AND i.id < ?)) ORDER BY i.created_at DESC, i.id DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP, Time.at(created_at), Time.at(created_at), item_id)
-        rescue
+        rescue => e
+          p e
           db.query('ROLLBACK')
           halt_with_error 500, 'db error'
         end
@@ -335,8 +336,9 @@ module Isucari
         # 1st page
         begin
           db.xquery("#{common_query} WHERE (i.seller_id = ? OR i.buyer_id = ?) AND i.status IN (?, ?, ?, ?, ?) ORDER BY i.created_at DESC, i.id DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP)
-        rescue
+        rescue => e
           db.query('ROLLBACK')
+          p e
           halt_with_error 500, 'db error'
         end
       end
