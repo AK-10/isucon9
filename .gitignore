@@ -1,0 +1,8 @@
+/**/*.jpg
+/**/*.png
+
+ruby/.bundle/ruby/
+go/isucari*
+perl/
+frontend/node_modules/*
+sql/initial.sql
