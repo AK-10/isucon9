@@ -374,7 +374,7 @@ module Isucari
           'name' => item_usr['name'],
           'price' => item_usr['price'],
           'description' => item_usr['description'],
-          'image_url' => get_image_url(item['image_name']),
+          'image_url' => get_image_url(item_usr['image_name']),
           'category_id' => item_usr['category_id'],
           # transaction_evidence_id
           # transaction_evidence_status
