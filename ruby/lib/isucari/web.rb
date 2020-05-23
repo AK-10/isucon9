@@ -69,7 +69,7 @@ module Isucari
       end
 
       def redis_client
-        # Thread.current[:redis] ||= Redis.new(path: ENV["REDIS_PID"] || '/var/run/redis-server.pid')
+        # Thread.current[:redis] ||= Redis.new(path: ENV["REDIS_PID"] || '/var/run/redis/redis-server.sock')
         Thread.current[:redis] ||= Redis.new(
           host: ENV["REDIS_HOST"] || '127.0.0.1',
           port: ENV["REDIS_PORT"] || 6379,
@@ -313,7 +313,20 @@ module Isucari
       items = if item_id > 0 && created_at > 0
         # paging
         begin
-          db.xquery("SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND `status` IN (?, ?, ?, ?, ?) AND (`created_at` < ?  OR (`created_at` <= ? AND `id` < ?)) ORDER BY `created_at` DESC, `id` DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP, Time.at(created_at), Time.at(created_at), item_id)
+          # outer join説ある
+          common_query <<~QUERY
+            SELECT
+              u.id as u_id, u.account_name, u.hashed_password, u.address, u.num_sell_items, u.last_bump, u.created_at as u_created_at,
+              i.id, i.seller_id, i.buyer_id, i.status, i.name, i.price, i.description, i.image_name, i.category_id, i.created_at, i.updated_at
+            FROM
+              items as i
+            INNER JOIN
+              users as u
+            ON
+              i.seller_id = u.id
+          QUERY
+
+          db.xquery("#{comon_query} WHERE (`i.seller_id` = ? OR `i.buyer_id` = ?) AND `i.status` IN (?, ?, ?, ?, ?) AND (`i.created_at` < ?  OR (`i.created_at` <= ? AND `i.id` < ?)) ORDER BY `i.created_at` DESC, `i.id` DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP, Time.at(created_at), Time.at(created_at), item_id)
         rescue
           db.query('ROLLBACK')
           halt_with_error 500, 'db error'
@@ -321,43 +334,51 @@ module Isucari
       else
         # 1st page
         begin
-          db.xquery("SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND `status` IN (?, ?, ?, ?, ?) ORDER BY `created_at` DESC, `id` DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP)
+          db.xquery("#{comon_query} WHERE (`i.seller_id` = ? OR `i.buyer_id` = ?) AND `i.status` IN (?, ?, ?, ?, ?) ORDER BY `i.created_at` DESC, `i.id` DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP)
         rescue
           db.query('ROLLBACK')
           halt_with_error 500, 'db error'
         end
       end
 
-      item_details = items.map do |item|
-        seller = get_user_simple_by_id(item['seller_id'])
+      item_details = items.map do |item_usr|
+        seller = {
+          "id" => item_usr["u_id"],
+          "account_name" => item_usr["account_name"],
+          "hashed_password" => item_usr["hashed_password"],
+          "address" => item_usr["address"],
+          "num_sell_items" => item_usr["num_sell_items"],
+          "last_bump" => item_usr["last_bump"],
+          "created_at" => item_usr["u_created_at"],
+        }
         if seller.nil?
           db.query('ROLLBACK')
           halt_with_error 404, 'seller not found'
         end
 
-        category = get_category_by_id(item['category_id'])
+        category = get_category_by_id(item_usr['category_id'])
         if category.nil?
           db.query('ROLLBACK')
           halt_with_error 404, 'category not found'
         end
 
         item_detail = {
-          'id' => item['id'],
-          'seller_id' => item['seller_id'],
+          'id' => item_usr['id'],
+          'seller_id' => item_usr['seller_id'],
           'seller' => seller,
           # buyer_id
           # buyer
-          'status' => item['status'],
-          'name' => item['name'],
-          'price' => item['price'],
-          'description' => item['description'],
+          'status' => item_usr['status'],
+          'name' => item_usr['name'],
+          'price' => item_usr['price'],
+          'description' => item_usr['description'],
           'image_url' => get_image_url(item['image_name']),
-          'category_id' => item['category_id'],
+          'category_id' => item_usr['category_id'],
           # transaction_evidence_id
           # transaction_evidence_status
           # shipping_status
           'category' => category,
-          'created_at' => item['created_at'].to_i
+          'created_at' => item_usr['created_at'].to_i
         }
 
         if item['buyer_id'] != 0
