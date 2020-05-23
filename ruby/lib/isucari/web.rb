@@ -383,18 +383,19 @@ module Isucari
           'created_at' => item_usr['created_at'].to_i
         }
 
-        if item['buyer_id'] != 0
-          buyer = get_user_simple_by_id(item['buyer_id'])
+        if item_usr['buyer_id'] != 0
+          buyer = get_user_simple_by_id(item_usr['buyer_id'])
           if buyer.nil?
             db.query('ROLLBACK')
             halt_with_error 404, 'buyer not found'
           end
 
-          item_detail['buyer_id'] = item['buyer_id']
+          item_detail['buyer_id'] = item_usr['buyer_id']
           item_detail['buyer'] = buyer
+          # item
         end
 
-        transaction_evidence = db.xquery('SELECT * FROM `transaction_evidences` WHERE `item_id` = ?', item['id']).first
+        transaction_evidence = db.xquery('SELECT * FROM `transaction_evidences` WHERE `item_id` = ?', item_usr['id']).first
         unless transaction_evidence.nil?
           shipping = db.xquery('SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ?', transaction_evidence['id']).first
           if shipping.nil?
