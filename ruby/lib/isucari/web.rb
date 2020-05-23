@@ -69,12 +69,12 @@ module Isucari
       end
 
       def redis_client
-        # Thread.current[:redis] ||= Redis.new(path: ENV["REDIS_PID"] || '/var/run/redis.pid')
-        Thread.current[:redis] ||= Redis.new(
-          host: ENV["REDIS_HOST"] || '127.0.0.1',
-          port: ENV["REDIS_PORT"] || 6379,
-          db: 15
-        )
+        Thread.current[:redis] ||= Redis.new(path: ENV["REDIS_PID"] || '/var/run/redis-server.pid')
+        # Thread.current[:redis] ||= Redis.new(
+        #   host: ENV["REDIS_HOST"] || '127.0.0.1',
+        #   port: ENV["REDIS_PORT"] || 6379,
+        #   db: 15
+        # )
       end
 
       def init_categories
