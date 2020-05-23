@@ -309,23 +309,23 @@ module Isucari
       item_id = params['item_id'].to_i
       created_at = params['created_at'].to_i
 
+      # outer join説ある
+      common_query = <<~QUERY
+        SELECT
+          u.id as u_id, u.account_name, u.hashed_password, u.address, u.num_sell_items, u.last_bump, u.created_at as u_created_at,
+          i.id, i.seller_id, i.buyer_id, i.status, i.name, i.price, i.description, i.image_name, i.category_id, i.created_at, i.updated_at
+        FROM
+          items as i
+        INNER JOIN
+          users as u
+        ON
+          i.seller_id = u.id
+      QUERY
+
       db.query('BEGIN')
       items = if item_id > 0 && created_at > 0
         # paging
         begin
-          # outer join説ある
-          common_query <<~QUERY
-            SELECT
-              u.id as u_id, u.account_name, u.hashed_password, u.address, u.num_sell_items, u.last_bump, u.created_at as u_created_at,
-              i.id, i.seller_id, i.buyer_id, i.status, i.name, i.price, i.description, i.image_name, i.category_id, i.created_at, i.updated_at
-            FROM
-              items as i
-            INNER JOIN
-              users as u
-            ON
-              i.seller_id = u.id
-          QUERY
-
           db.xquery("#{comon_query} WHERE (`i.seller_id` = ? OR `i.buyer_id` = ?) AND `i.status` IN (?, ?, ?, ?, ?) AND (`i.created_at` < ?  OR (`i.created_at` <= ? AND `i.id` < ?)) ORDER BY `i.created_at` DESC, `i.id` DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP, Time.at(created_at), Time.at(created_at), item_id)
         rescue
           db.query('ROLLBACK')
