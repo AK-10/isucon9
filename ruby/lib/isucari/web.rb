@@ -168,6 +168,23 @@ module Isucari
       def halt_with_error(status = 500, error = 'unknown')
         halt status, { 'error' => error }.to_json
       end
+
+      def users_mapper(column_prefix, mapped_prefix)
+        columns = %w(id account_name hashed_password address num_sell_items last_bump created_at)
+
+        columns.map {|column| "#{column_prefix}.#{column} AS #{mapped_prefix}#{column}" }.join(",")
+      end
+
+      def user_to_hash(hash, prefix)
+        columns = %w(id account_name hashed_password address num_sell_items last_bump created_at)
+        
+        ret = {}
+        columns.each do |column|
+          ret[column] = hash["#{prefix}#{column}"]
+        end
+
+        ret
+      end
     end
 
     # API
@@ -309,17 +326,23 @@ module Isucari
       item_id = params['item_id'].to_i
       created_at = params['created_at'].to_i
 
-      # outer join説ある
+      # todo sellerはcacheしよう
+      # outer join(buyerは)
       common_query = <<~QUERY
         SELECT
-          u.id as u_id, u.account_name, u.hashed_password, u.address, u.num_sell_items, u.last_bump, u.created_at as u_created_at,
-          i.id, i.seller_id, i.buyer_id, i.status, i.name, i.price, i.description, i.image_name, i.category_id, i.created_at, i.updated_at
+          #{users_mapper("s", "s_")},
+          i.id, i.seller_id, i.buyer_id, i.status, i.name, i.price, i.description, i.image_name, i.category_id, i.created_at, i.updated_at,
+          #{users_mapper("b", "b_")}
         FROM
           items as i
         INNER JOIN
-          users as u
+          users as s
         ON
-          i.seller_id = u.id
+          i.seller_id = s.id
+        LEFT OUTER JOIN
+          users as b
+        ON
+          i.buyer_id = b.id
       QUERY
 
       db.query('BEGIN')
@@ -328,7 +351,7 @@ module Isucari
         begin
           db.xquery("#{common_query} WHERE (i.seller_id = ? OR i.buyer_id = ?) AND i.status IN (?, ?, ?, ?, ?) AND (i.created_at < ?  OR (i.created_at <= ? AND i.id < ?)) ORDER BY i.created_at DESC, i.id DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP, Time.at(created_at), Time.at(created_at), item_id)
         rescue => e
-          p e
+          p e # @todo remove this line
           db.query('ROLLBACK')
           halt_with_error 500, 'db error'
         end
@@ -337,22 +360,14 @@ module Isucari
         begin
           db.xquery("#{common_query} WHERE (i.seller_id = ? OR i.buyer_id = ?) AND i.status IN (?, ?, ?, ?, ?) ORDER BY i.created_at DESC, i.id DESC LIMIT #{TRANSACTIONS_PER_PAGE + 1}", user['id'], user['id'], ITEM_STATUS_ON_SALE, ITEM_STATUS_TRADING, ITEM_STATUS_SOLD_OUT, ITEM_STATUS_CANCEL, ITEM_STATUS_STOP)
         rescue => e
+          p e # @todo remove this line
           db.query('ROLLBACK')
-          p e
           halt_with_error 500, 'db error'
         end
       end
 
       item_details = items.map do |item_usr|
-        seller = {
-          "id" => item_usr["u_id"],
-          "account_name" => item_usr["account_name"],
-          "hashed_password" => item_usr["hashed_password"],
-          "address" => item_usr["address"],
-          "num_sell_items" => item_usr["num_sell_items"],
-          "last_bump" => item_usr["last_bump"],
-          "created_at" => item_usr["u_created_at"],
-        }
+        seller = user_to_hash(item_usr, "s_")
         if seller.nil?
           db.query('ROLLBACK')
           halt_with_error 404, 'seller not found'
@@ -384,20 +399,19 @@ module Isucari
         }
 
         if item_usr['buyer_id'] != 0
-          buyer = get_user_simple_by_id(item_usr['buyer_id'])
-          if buyer.nil?
+          buyer = user_to_hash(item_usr, "b_")
+          if buyer["id"].nil?
             db.query('ROLLBACK')
             halt_with_error 404, 'buyer not found'
           end
 
           item_detail['buyer_id'] = item_usr['buyer_id']
           item_detail['buyer'] = buyer
-          # item
         end
 
-        transaction_evidence = db.xquery('SELECT * FROM `transaction_evidences` WHERE `item_id` = ?', item_usr['id']).first
+        transaction_evidence = db.xquery('SELECT * FROM `transaction_evidences` WHERE `item_id` = ? LIMIT 1', item_usr['id']).first
         unless transaction_evidence.nil?
-          shipping = db.xquery('SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ?', transaction_evidence['id']).first
+          shipping = db.xquery('SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ? LIMIT 1', transaction_evidence['id']).first
           if shipping.nil?
             db.query('ROLLBACK')
             halt_with_error 404, 'shipping not found'
