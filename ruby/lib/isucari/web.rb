@@ -426,7 +426,7 @@ module Isucari
           item_detail['buyer'] = buyer
         end
 
-        transaction_evidence = db.xquery('SELECT te.id, te.status, sh.reserve_id FROM transaction_evidences AS te LEFT OUTER JOIN shippings AS sh ON sh.transaction_evidence_id = te.id WHERE item_id = ? LIMIT 1', item_usr['id']).first
+        transaction_evidence = db.xquery('SELECT te.id, te.status, sh.reserve_id FROM transaction_evidences AS te LEFT OUTER JOIN shippings AS sh ON sh.transaction_evidence_id = te.id WHERE te.item_id = ? LIMIT 1', item_usr['id']).first
         
         unless transaction_evidence.nil?
           if transaction_evidence["reserve_id"].nil?
