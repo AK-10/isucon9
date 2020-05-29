@@ -435,7 +435,7 @@ module Isucari
           end
 
           ssr = begin
-            api_client.shipment_status(get_shipment_service_url, 'reserve_id' => transaction_reserve['reserve_id'])
+            api_client.shipment_status(get_shipment_service_url, 'reserve_id' => transaction_evidence['reserve_id'])
           rescue
             db.query('ROLLBACK')
             halt_with_error 500, 'failed to request to shipment service'
