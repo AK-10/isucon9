@@ -59,7 +59,17 @@ def activerecord_result
   puts rows
 end
 
-
+def activerecord_bench
+  conn = ActiveRecord::Base.connection
+  Benchmark.bm 100 do |r|
+    r.report "ActiveRecord benchmark 10 iteration" do
+      conn = ActiveRecord::Base.connection
+      (1..10).each do
+        conn.select_all(QUERY)
+      end
+    end
+  end
+end
 
 def mysql2_result
   result = mysql2_client.query(QUERY)
@@ -71,8 +81,8 @@ end
 
 def mysql2_bench
   Benchmark.bm 100 do |r|
-    r.report "mysql2 benchmark 100 iteration" do
-      (1..100).each do
+    r.report "mysql2 benchmark 10 iteration" do
+      (1..10).each do
         mysql2_client.query(QUERY)
       end
     end
