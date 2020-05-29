@@ -436,7 +436,7 @@ module Isucari
 
           ssr = begin
             if transaction_evidence["status"] == "done"
-              { "status": "done" }
+              { "status" => "done" }
             else
               api_client.shipment_status(get_shipment_service_url, 'reserve_id' => transaction_evidence['reserve_id'])
             end
