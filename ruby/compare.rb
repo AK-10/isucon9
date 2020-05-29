@@ -32,7 +32,7 @@ mysql2_client = Mysql2::Client.new(
   'reconnect' => true,
 )
 
-query = <<~QUERY
+QUERY = <<~QUERY
   SELECT
     *
   FROM
@@ -51,7 +51,7 @@ QUERY
 
 def activerecord_result
   conn = ActiveRecord::Base.connection
-  result = conn.select_all(query)
+  result = conn.select_all(QUERY)
   puts "class of result:#{result.class}"
 
   rows = result.to_hash.first(5)
@@ -64,14 +64,14 @@ def activerecord_bench
     r.report "ActiveRecord benchmark 1000 iteration" do
       conn = ActiveRecord::Base.connection
       (1..100).each do
-        conn.select_all(query)
+        conn.select_all(QUERY)
       end
     end
   end
 end
 
 def mysql2_result
-  result = mysql2_client.query(query)
+  result = mysql2_client.query(QUERY)
   puts "class of result: #{result.class}"
 
   rows = result.to_a.first(5)
@@ -82,7 +82,7 @@ def mysql2_bench
   Benchmark.bm 100 do |r|
     r.report "ActiveRecord benchmark 1000 iteration" do
       (1..100).each do
-        mysql2_client.query(query)
+        mysql2_client.query(QUERY)
       end
     end
   end 
