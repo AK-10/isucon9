@@ -47,6 +47,7 @@ QUERY = <<~QUERY
     (i.seller_id = 1 OR i.buyer_id = 1)
   ORDER BY
     i.created_at DESC
+  LIMIT 100
 QUERY
 
 def activerecord_result
