@@ -396,7 +396,8 @@ module Isucari
       reserve_ids = items.map {|item| item.dig("sh_reserve_id") }.compact
 
       begin
-        statuses = Parallel.map(reserve_ids, in_threads: 10) do |reserve_id|
+        # statuses = Parallel.map(reserve_ids, in_threads: 10) do |reserve_id|
+        statuses = reserve_ids.map do |reserve_id|
           api_client.shipment_status(get_shipment_service_url, 'reserve_id' => reserve_id)
         end
       rescue
