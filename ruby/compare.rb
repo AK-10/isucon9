@@ -55,21 +55,11 @@ def activerecord_result
   result = conn.select_all(QUERY)
   puts "class of result:#{result.class}"
 
-  rows = result.to_hash.first
+  rows = result.to_a.first
   puts rows
 end
 
-def activerecord_bench
-  conn = ActiveRecord::Base.connection
-  Benchmark.bm 100 do |r|
-    r.report "ActiveRecord benchmark 1000 iteration" do
-      conn = ActiveRecord::Base.connection
-      (1..100).each do
-        conn.select_all(QUERY)
-      end
-    end
-  end
-end
+
 
 def mysql2_result
   result = mysql2_client.query(QUERY)
@@ -81,7 +71,7 @@ end
 
 def mysql2_bench
   Benchmark.bm 100 do |r|
-    r.report "ActiveRecord benchmark 1000 iteration" do
+    r.report "mysql2 benchmark 100 iteration" do
       (1..100).each do
         mysql2_client.query(QUERY)
       end
@@ -89,20 +79,16 @@ def mysql2_bench
   end 
 end
 
-rules = {
-  'activerecord': {
-    'result': activerecord_result,
-    'bench': activerecord_bench,
-  },
-  'mysql2': {
-    'result': mysql2_result,
-    'bench': mysql2_bench,
-  }
-}
 
 # run command
-
-command = rules.dig("target", "type")
-return unless command
-
-command()
+if target == 'mysql2' && type == 'result'
+  mysql2_result
+elsif target == 'mysql2' && type == 'bench'
+  mysql2_bench
+elsif target == 'activerecord' && type == 'result'
+  activerecord_result
+elsif target == 'activerecord' && type == 'bench'
+  activerecord_bench
+else
+  "target, type not found"
+end
