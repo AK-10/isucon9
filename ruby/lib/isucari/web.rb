@@ -5,6 +5,7 @@ require 'mysql2'
 require 'mysql2-cs-bind'
 require 'bcrypt'
 require 'isucari/api'
+require 'parallel'
 
 require 'redis'
 
@@ -185,6 +186,23 @@ module Isucari
 
         ret
       end
+
+      # 使うときにprefixが他のものとバッティングするとバグる
+      # 常にテーブルに対するAS句をつけること
+      def column_mapper(columns, prefix)
+        columns.map {|column| "#{prefix}.#{column} AS #{prefix}_#{column}" }.join(",")
+      end
+
+      def transaction_evidences_mapper(prefix)
+        columns = %w(id seller_id buyer_id status item_id item_name item_price item_description item_category_id item_root_category_id created_at updated_at)
+        column_mapper(columns, prefix)
+      end
+
+      def shippings_mapper(prefix)
+        columns = %w(transaction_evidence_id status item_name item_id reserve_id reserve_time to_address to_name from_address from_name img_binary created_at updated_at)
+        column_mapper(columns, prefix)
+      end
+  
     end
 
     # API
@@ -327,12 +345,14 @@ module Isucari
       created_at = params['created_at'].to_i
 
       # todo sellerはcacheしよう
-      # outer join(buyerは)
+      # outer join(buyerはいない可能性あり)
       common_query = <<~QUERY
         SELECT
           #{users_mapper("s", "s_")},
           i.id, i.seller_id, i.buyer_id, i.status, i.name, i.price, i.description, i.image_name, i.category_id, i.created_at, i.updated_at,
-          #{users_mapper("b", "b_")}
+          #{users_mapper("b", "b_")},
+          #{column_mapper(%w(id status), "te")},
+          #{column_mapper(%w(reserve_id), "sh")}
         FROM
           items as i
         INNER JOIN
@@ -343,6 +363,14 @@ module Isucari
           users as b
         ON
           i.buyer_id = b.id
+        LEFT OUTER JOIN
+          transaction_evidences as te
+        ON
+          i.id = te.item_id
+        INNER JOIN
+          shippings as sh
+        ON
+          te.id = sh.transaction_evidence_id
       QUERY
 
       db.query('BEGIN')
@@ -365,6 +393,19 @@ module Isucari
           halt_with_error 500, 'db error'
         end
       end
+
+      reserve_ids = items.map {|item| item.dig("sh_reserve_id") }.compact
+
+      begin
+        statuses = Parallel.map(reserve_ids, in_threads: 10) do |reserve_id|
+          api_client.shipment_status(get_shipment_service_url, 'reserve_id' => reserve_id)
+        end
+      rescue
+        db.query('ROLLBACK')
+        halt_with_error 500, 'failed to request to shipment service'
+      end
+
+      zipped_reserved_ids = reserve_ids.zip(statuses)
 
       item_details = items.map do |item_usr|
         seller = user_to_hash(item_usr, "s_")
@@ -409,24 +450,25 @@ module Isucari
           item_detail['buyer'] = buyer
         end
 
-        transaction_evidence = db.xquery('SELECT * FROM `transaction_evidences` WHERE `item_id` = ? LIMIT 1', item_usr['id']).first
-        unless transaction_evidence.nil?
-          shipping = db.xquery('SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ? LIMIT 1', transaction_evidence['id']).first
-          if shipping.nil?
-            db.query('ROLLBACK')
-            halt_with_error 404, 'shipping not found'
+        item_detail['transaction_evidence_id'] = item_usr['te_id']
+        item_detail['transaction_evidence_status'] = item_usr['te_status']
+        if item_usr["te_status"]
+          zipped_reserve_id_ssr = zipped_reserved_ids.find { |zipped| item_usr["sh_reserved_id"] == zipped[0] }
+          unless zipped_status.nil?
+            ssr = zipped_status[1]
+            item_detail['shipping_status'] = ssr['status']
           end
+        end
 
-          ssr = begin
-            api_client.shipment_status(get_shipment_service_url, 'reserve_id' => shipping['reserve_id'])
-          rescue
-            db.query('ROLLBACK')
-            halt_with_error 500, 'failed to request to shipment service'
-          end
+        # transaction_evidence = db.xquery('SELECT * FROM `transaction_evidences` WHERE `item_id` = ? LIMIT 1', item_usr['id']).first
+        # unless transaction_evidence.nil?
+        #   shipping = db.xquery('SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ? LIMIT 1', transaction_evidence['id']).first
+        #   if shipping.nil?
+        #     db.query('ROLLBACK')
+        #     halt_with_error 404, 'shipping not found'
+        #   end
 
-          item_detail['transaction_evidence_id'] = transaction_evidence['id']
-          item_detail['transaction_evidence_status'] = transaction_evidence['status']
-          item_detail['shipping_status'] = ssr['status']
+          # ssr = begin
         end
 
         item_detail

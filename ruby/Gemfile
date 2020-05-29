@@ -8,6 +8,7 @@ gem 'bcrypt'
 gem 'redis'
 
 gem 'activerecord'
+gem 'parallel'
 
 gem 'irb', require: false
 

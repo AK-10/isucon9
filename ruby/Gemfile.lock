@@ -27,6 +27,7 @@ GEM
     mysql2-cs-bind (0.0.7)
       mysql2
     nio4r (2.5.1)
+    parallel (1.19.1)
     puma (4.1.0)
       nio4r (~> 2.0)
     rack (2.0.7)
@@ -62,6 +63,7 @@ DEPENDENCIES
   irb
   mysql2
   mysql2-cs-bind
+  parallel
   puma
   redis
   sinatra
