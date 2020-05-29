@@ -202,7 +202,6 @@ module Isucari
         columns = %w(transaction_evidence_id status item_name item_id reserve_id reserve_time to_address to_name from_address from_name img_binary created_at updated_at)
         column_mapper(columns, prefix)
       end
-  
     end
 
     # API
@@ -468,8 +467,7 @@ module Isucari
         #     halt_with_error 404, 'shipping not found'
         #   end
 
-          # ssr = begin
-        end
+        # ssr = begin
 
         item_detail
       end
