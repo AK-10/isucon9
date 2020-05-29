@@ -349,9 +349,7 @@ module Isucari
         SELECT
           #{users_mapper("s", "s_")},
           i.id, i.seller_id, i.buyer_id, i.status, i.name, i.price, i.description, i.image_name, i.category_id, i.created_at, i.updated_at,
-          #{users_mapper("b", "b_")},
-          #{column_mapper(%w(id status), "te")},
-          #{column_mapper(%w(reserve_id), "sh")}
+          #{users_mapper("b", "b_")}
         FROM
           items as i
         INNER JOIN
@@ -362,14 +360,6 @@ module Isucari
           users as b
         ON
           i.buyer_id = b.id
-        LEFT OUTER JOIN
-          transaction_evidences as te
-        ON
-          i.id = te.item_id
-        INNER JOIN
-          shippings as sh
-        ON
-          te.id = sh.transaction_evidence_id
       QUERY
 
       db.query('BEGIN')
@@ -392,20 +382,6 @@ module Isucari
           halt_with_error 500, 'db error'
         end
       end
-
-      reserve_ids = items.map {|item| item.dig("sh_reserve_id") }.compact
-
-      begin
-        # statuses = Parallel.map(reserve_ids, in_threads: 10) do |reserve_id|
-        statuses = reserve_ids.map do |reserve_id|
-          api_client.shipment_status(get_shipment_service_url, 'reserve_id' => reserve_id)
-        end
-      rescue
-        db.query('ROLLBACK')
-        halt_with_error 500, 'failed to request to shipment service'
-      end
-
-      zipped_reserved_ids = reserve_ids.zip(statuses)
 
       item_details = items.map do |item_usr|
         seller = user_to_hash(item_usr, "s_")
@@ -450,25 +426,26 @@ module Isucari
           item_detail['buyer'] = buyer
         end
 
-        item_detail['transaction_evidence_id'] = item_usr['te_id']
-        item_detail['transaction_evidence_status'] = item_usr['te_status']
-        if item_usr["te_status"]
-          zipped_reserve_id_ssr = zipped_reserved_ids.find { |zipped| item_usr["sh_reserved_id"] == zipped[0] }
-          unless zipped_reserve_id_ssr.nil?
-            ssr = zipped_reserve_id_ssr[1]
-            item_detail['shipping_status'] = ssr['status']
+        transaction_evidence = db.xquery('SELECT te.id, te.status, sh.reserve_id FROM transaction_evidences AS te LEFT OUTER JOIN shippings AS sh ON sh.transaction_evidence_id = te.id WHERE item_id = ? LIMIT 1', item_usr['id']).first
+        
+        unless transaction_evidence.nil?
+          if transaction_evidence["reserve_id"].nil?
+            db.query('ROLLBACK')
+            halt_with_error 404, 'shipping not found'
           end
+
+          ssr = begin
+            api_client.shipment_status(get_shipment_service_url, 'reserve_id' => transaction_reserve['reserve_id'])
+          rescue
+            db.query('ROLLBACK')
+            halt_with_error 500, 'failed to request to shipment service'
+          end
+
+          item_detail['transaction_evidence_id'] = transaction_evidence['id']
+          item_detail['transaction_evidence_status'] = transaction_evidence['status']
+          item_detail['shipping_status'] = ssr['status']
         end
 
-        # transaction_evidence = db.xquery('SELECT * FROM `transaction_evidences` WHERE `item_id` = ? LIMIT 1', item_usr['id']).first
-        # unless transaction_evidence.nil?
-        #   shipping = db.xquery('SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ? LIMIT 1', transaction_evidence['id']).first
-        #   if shipping.nil?
-        #     db.query('ROLLBACK')
-        #     halt_with_error 404, 'shipping not found'
-        #   end
-
-        # ssr = begin
 
         item_detail
       end
