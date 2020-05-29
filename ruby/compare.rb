@@ -55,7 +55,7 @@ def activerecord_result
   result = conn.select_all(QUERY)
   puts "class of result:#{result.class}"
 
-  rows = result.to_hash.first(5)
+  rows = result.to_hash.first
   puts rows
 end
 
@@ -75,7 +75,7 @@ def mysql2_result
   result = mysql2_client.query(QUERY)
   puts "class of result: #{result.class}"
 
-  rows = result.to_a.first(5)
+  rows = result.to_a.first
   puts rows
 end
 
