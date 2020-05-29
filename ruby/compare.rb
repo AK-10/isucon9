@@ -20,7 +20,8 @@ ActiveRecord::Base.establish_connection(
   reconnect: true
 )
 
-mysql2_client = Mysql2::Client.new(
+
+MYSQL2_CLIENT = Mysql2::Client.new(
   'host' => ENV['MYSQL_HOST'] || '127.0.0.1',
   'port' => ENV['MYSQL_PORT'] || '3306',
   'database' => ENV['MYSQL_DBNAME'] || 'isucari',
@@ -72,7 +73,7 @@ def activerecord_bench
 end
 
 def mysql2_result
-  result = mysql2_client.query(QUERY)
+  result = MYSQL2_CLIENT.query(QUERY)
   puts "class of result: #{result.class}"
 
   rows = result.to_a.first
@@ -83,7 +84,7 @@ def mysql2_bench
   Benchmark.bm 100 do |r|
     r.report "mysql2 benchmark 10 iteration" do
       (1..10).each do
-        mysql2_client.query(QUERY)
+        MYSQL2_CLIENT.query(QUERY)
       end
     end
   end 
