@@ -453,8 +453,8 @@ module Isucari
         item_detail['transaction_evidence_status'] = item_usr['te_status']
         if item_usr["te_status"]
           zipped_reserve_id_ssr = zipped_reserved_ids.find { |zipped| item_usr["sh_reserved_id"] == zipped[0] }
-          unless zipped_status.nil?
-            ssr = zipped_status[1]
+          unless zipped_reserve_id_ssr.nil?
+            ssr = zipped_reserve_id_ssr[1]
             item_detail['shipping_status'] = ssr['status']
           end
         end
