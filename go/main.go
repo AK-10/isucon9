@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -21,6 +22,8 @@ import (
 	goji "goji.io"
 	"goji.io/pat"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
 const (
@@ -268,6 +271,8 @@ type resSetting struct {
 	Categories        []Category `json:"categories"`
 }
 
+var app *newrelic.Application
+
 func init() {
 	store = sessions.NewCookieStore([]byte("abc"))
 
@@ -276,6 +281,7 @@ func init() {
 	templates = template.Must(template.ParseFiles(
 		"../public/index.html",
 	))
+
 }
 
 func main() {
@@ -303,6 +309,11 @@ func main() {
 	if password == "" {
 		password = "isucari"
 	}
+	newRelicLicenseKey := os.Getenv("NEW_RELIC_LICENSE")
+	newRelicAppName := os.Getenv("NEW_RELIC_APP_NAME")
+	if newRelicAppName == "" {
+		newRelicAppName = "AK-10-isucon9-qualify"
+	}
 
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
@@ -319,7 +330,18 @@ func main() {
 	}
 	defer dbx.Close()
 
+	app, err = newrelic.NewApplication(
+		newrelic.ConfigAppName("AK-10-isucon9-qualify"),
+		newrelic.ConfigLicense(newRelicLicenseKey),
+		newrelic.ConfigDistributedTracerEnabled(true),
+	)
+	if err != nil {
+		log.Fatalf("failed to create NewRelicApplication: %s.", err.Error())
+	}
+
 	mux := goji.NewMux()
+
+	mux.Use(newRelicObserver)
 
 	// API
 	mux.HandleFunc(pat.Post("/initialize"), postInitialize)
@@ -357,6 +379,14 @@ func main() {
 	// Assets
 	mux.Handle(pat.Get("/*"), http.FileServer(http.Dir("../public")))
 	log.Fatal(http.ListenAndServe(":8000", mux))
+}
+
+func newRelicObserver(inner http.Handler) http.Handler {
+	mw := func(w http.ResponseWriter, r *http.Request) {
+		txName := fmt.Sprint("%s %s", strings.ToUpper(r.Method), r.URL.Path)
+		newrelic.WrapHandle(app, txName, inner)
+	}
+	return http.HandlerFunc(mw)
 }
 
 func getSession(r *http.Request) *sessions.Session {
