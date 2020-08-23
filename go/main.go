@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -331,7 +330,7 @@ func main() {
 	defer dbx.Close()
 
 	app, err = newrelic.NewApplication(
-		newrelic.ConfigAppName("AK-10-isucon9-qualify"),
+		newrelic.ConfigAppName(newRelicAppName),
 		newrelic.ConfigLicense(newRelicLicenseKey),
 		newrelic.ConfigDistributedTracerEnabled(true),
 	)
@@ -341,27 +340,27 @@ func main() {
 
 	mux := goji.NewMux()
 
-	mux.Use(newRelicObserver)
+	// mux.Use(newRelicObserver)
 
 	// API
-	mux.HandleFunc(pat.Post("/initialize"), postInitialize)
-	mux.HandleFunc(pat.Get("/new_items.json"), getNewItems)
-	mux.HandleFunc(pat.Get("/new_items/:root_category_id.json"), getNewCategoryItems)
-	mux.HandleFunc(pat.Get("/users/transactions.json"), getTransactions)
-	mux.HandleFunc(pat.Get("/users/:user_id.json"), getUserItems)
-	mux.HandleFunc(pat.Get("/items/:item_id.json"), getItem)
-	mux.HandleFunc(pat.Post("/items/edit"), postItemEdit)
-	mux.HandleFunc(pat.Post("/buy"), postBuy)
-	mux.HandleFunc(pat.Post("/sell"), postSell)
-	mux.HandleFunc(pat.Post("/ship"), postShip)
-	mux.HandleFunc(pat.Post("/ship_done"), postShipDone)
-	mux.HandleFunc(pat.Post("/complete"), postComplete)
-	mux.HandleFunc(pat.Get("/transactions/:transaction_evidence_id.png"), getQRCode)
-	mux.HandleFunc(pat.Post("/bump"), postBump)
-	mux.HandleFunc(pat.Get("/settings"), getSettings)
-	mux.HandleFunc(pat.Post("/login"), postLogin)
-	mux.HandleFunc(pat.Post("/register"), postRegister)
-	mux.HandleFunc(pat.Get("/reports.json"), getReports)
+	mux.HandleFunc(pat.Post("/initialize"), newRelicObserver(postInitialize))
+	mux.HandleFunc(pat.Get("/new_items.json"), newRelicObserver(getNewItems))
+	mux.HandleFunc(pat.Get("/new_items/:root_category_id.json"), newRelicObserver(getNewCategoryItems))
+	mux.HandleFunc(pat.Get("/users/transactions.json"), newRelicObserver(getTransactions))
+	mux.HandleFunc(pat.Get("/users/:user_id.json"), newRelicObserver(getUserItems))
+	mux.HandleFunc(pat.Get("/items/:item_id.json"), newRelicObserver(getItem))
+	mux.HandleFunc(pat.Post("/items/edit"), newRelicObserver(postItemEdit))
+	mux.HandleFunc(pat.Post("/buy"), newRelicObserver(postBuy))
+	mux.HandleFunc(pat.Post("/sell"), newRelicObserver(postSell))
+	mux.HandleFunc(pat.Post("/ship"), newRelicObserver(postShip))
+	mux.HandleFunc(pat.Post("/ship_done"), newRelicObserver(postShipDone))
+	mux.HandleFunc(pat.Post("/complete"), newRelicObserver(postComplete))
+	mux.HandleFunc(pat.Get("/transactions/:transaction_evidence_id.png"), newRelicObserver(getQRCode))
+	mux.HandleFunc(pat.Post("/bump"), newRelicObserver(postBump))
+	mux.HandleFunc(pat.Get("/settings"), newRelicObserver(getSettings))
+	mux.HandleFunc(pat.Post("/login"), newRelicObserver(postLogin))
+	mux.HandleFunc(pat.Post("/register"), newRelicObserver(postRegister))
+	mux.HandleFunc(pat.Get("/reports.json"), newRelicObserver(getReports))
 	// Frontend
 	mux.HandleFunc(pat.Get("/"), getIndex)
 	mux.HandleFunc(pat.Get("/login"), getIndex)
@@ -381,10 +380,10 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8000", mux))
 }
 
-func newRelicObserver(inner http.Handler) http.Handler {
+func newRelicObserver(inner func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
 	mw := func(w http.ResponseWriter, r *http.Request) {
-		txName := fmt.Sprint("%s %s", strings.ToUpper(r.Method), r.URL.Path)
-		newrelic.WrapHandle(app, txName, inner)
+		innerHandler := InnerHandler{Handle: inner}
+		newrelic.WrapHandle(app, r.URL.Path, innerHandler)
 	}
 	return http.HandlerFunc(mw)
 }
