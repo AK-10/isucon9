@@ -382,10 +382,13 @@ func main() {
 
 func newRelicObserver(inner func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
 	mw := func(w http.ResponseWriter, r *http.Request) {
-		innerHandler := InnerHandler{Handle: inner}
-		newrelic.WrapHandle(app, r.URL.Path, innerHandler)
+		name := r.Method + " " + r.URL.Path
+		tx := app.StartTransaction(name)
+		defer tx.End()
+
+		inner(w, r)
 	}
-	return http.HandlerFunc(mw)
+	return mw
 }
 
 func getSession(r *http.Request) *sessions.Session {
